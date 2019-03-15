@@ -9,7 +9,6 @@
                  |_|
 @summary:       Contains the pass breakdown and MNPR viewport renderer interfaces
 """
-from __future__ import print_function
 import os
 from PySide2 import QtCore, QtWidgets
 import maya.cmds as cmds
@@ -17,6 +16,8 @@ import coopLib as lib
 import coopQt as qt
 import mnpr_system
 import mnpr_info
+global frameCap2Grp
+import pymel.core as pm
 
 
 #    _                    _       _
@@ -145,18 +146,18 @@ class BreakdownUI(qt.CoopMayaUI):
             if cmds.mnpr(renderOperation=index) != prev:
                 changedOperation = index
         # give back information as to what the toggle is doing with mnpr
-        print("mnpr -renderOperation {0} -s {1};".format(changedOperation, int(self.sender().isChecked())))
+        print "mnpr -renderOperation {0} -s {1};".format(changedOperation, int(self.sender().isChecked()))
 
     def reloadOperationShaders(self):
         """ Reload shader of operation """
         operationIndex = self.sender().property("operationIndex")
         cmds.mnpr(rOS=operationIndex)
-        print("mnpr -rOS {0};".format(operationIndex))
+        print "mnpr -rOS {0};".format(operationIndex)
 
     def targetChanged(self):
         """ Change and visualize render target """
         cmds.mnpr(renderTarget=self.targetCoBox.currentIndex())
-        print("mnpr -renderTarget {0};".format(self.targetCoBox.currentIndex()))
+        print "mnpr -renderTarget {0};".format(self.targetCoBox.currentIndex())
 
     def channelsChanged(self):
         """ Enable/disable RGBA channels """
@@ -196,9 +197,9 @@ class BreakdownUI(qt.CoopMayaUI):
                 b = self.cChannels[2]
         cmds.mnpr(ch=(r * neg, g * neg, b * neg, a * neg))
         if not a:
-            print("mnpr -ch {0} {1} {2} {3}".format(r * neg, g * neg, b * neg, a * neg))
+            print "mnpr -ch {0} {1} {2} {3}".format(r * neg, g * neg, b * neg, a * neg)
         else:
-            print("mnpr -ch 0 0 0 {0}".format(a * neg))
+            print "mnpr -ch 0 0 0 {0}".format(a * neg)
 
     def colorTransformChanged(self, obj=0):
         """
@@ -212,7 +213,7 @@ class BreakdownUI(qt.CoopMayaUI):
         elif obj == self.colorTransform2:
             colorTransformMode = 2
         cmds.mnpr(ct=(colorTransformMode))
-        print("mnpr -ct {0};".format(colorTransformMode))
+        print "mnpr -ct {0};".format(colorTransformMode)
 
 
 #                       _
@@ -266,9 +267,29 @@ class ViewportRendererUI(qt.CoopMayaUI):
         self.supersampleImgChBox.setChecked(True)
         self.supersampleImgChBox.setToolTip("Increases internal render image size for anti-aliasing")
         frameCapCustomSettingsGrp = qt.WidgetGroup([self.supersampleImgChBox, frameCapFormatLabel, self.frameCapFormatCoBox], QtWidgets.QHBoxLayout())
-        # viewport to render
+        # viewport to render 
         self.viewport2RenderChBox = QtWidgets.QCheckBox("Stylized Render")
         self.viewport2RenderChBox.setChecked(True)
+        # viewport to render sequence
+        renderCapBox = QtWidgets.QGroupBox("Render Sequence ")
+        renderCapLayout = QtWidgets.QVBoxLayout(renderCapBox)
+        self.renderCapLabel4 = QtWidgets.QLabel(" File path directory ", self)
+        self.renderCapLine3 = QtWidgets.QLineEdit(self)
+        self.renderCapLabel5 = QtWidgets.QLabel(" Frame Range ", self)
+        self.renderCapLine = QtWidgets.QLineEdit(self)
+        self.renderCapLabel = QtWidgets.QLabel(" to ",self)
+        self.renderCapLine2 = QtWidgets.QLineEdit(self)
+        renderCap2Grp = qt.WidgetGroup([self.renderCapLine, self.renderCapLabel, self.renderCapLine2], QtWidgets.QHBoxLayout())
+        renderFramesBtn = QtWidgets.QPushButton("Render Frame Range")
+
+
+
+        
+
+
+
+
+
 
         # Add frame capture widgets
         frameCapLayout.addWidget(frameCapGrp)
@@ -276,7 +297,17 @@ class ViewportRendererUI(qt.CoopMayaUI):
         frameCapLayout.addWidget(frameCapCustomResGrp)
         frameCapLayout.addWidget(frameCapCustomSettingsGrp)
         frameCapLayout.addWidget(self.viewport2RenderChBox)
+        renderCapLayout.addWidget(self.renderCapLabel4)
+        renderCapLayout.addWidget(self.renderCapLine3)
+        renderCapLayout.addWidget(self.renderCapLabel5)
+        renderCapLayout.addWidget(renderCap2Grp)
+        renderCapLayout.addWidget(renderFramesBtn)
 
+
+        
+        
+
+ 
         # Quick playblast
         playblastBox = QtWidgets.QGroupBox("Quick Playblast")
         playblastLayout = QtWidgets.QVBoxLayout(playblastBox)
@@ -300,6 +331,7 @@ class ViewportRendererUI(qt.CoopMayaUI):
         # Populate UI
         ''' Create the main layouts and add widgets '''
         self.layout.addWidget(frameCapBox)
+        self.layout.addWidget(renderCapBox)
         self.layout.addWidget(qt.HLine(height=20 * self.dpiS))
         self.layout.addWidget(playblastBox)
         self.layout.addWidget(self.brand)
@@ -307,8 +339,15 @@ class ViewportRendererUI(qt.CoopMayaUI):
         # Create connections
         ''' SIGNALS '''
         frameCapBtn.clicked.connect(self.renderFrame)
+
+
         playblastBtn.clicked.connect(self.playblast)
+
+        renderFramesBtn.clicked.connect(self.renderFrameSequence)
         self.frameCapCustomChBox.toggled.connect(self.customRes)
+    
+
+            
 
     def customRes(self):
         """ Enables the input of custom resolution sizes """
@@ -350,6 +389,57 @@ class ViewportRendererUI(qt.CoopMayaUI):
             override = ""
         # render frame using npr system
         mnpr_system.renderFrame(saveDir, width, height, renderSize, imgFormat, override)
+    
+    def renderFrameSequence(self):
+        """ Gather all information from UI to render sequence  """
+        # get width and height
+
+        #get file path directory
+        pathOld= self.renderCapLine3.text()
+        #get Frame Range
+        startFrame = self.renderCapLine.text()
+        endFrame = self.renderCapLine2.text()
+        print('Start Frame: '+ startFrame)
+        print('End Frame: '+ endFrame)
+        modelPanel = lib.getActiveModelPanel()
+        # get width and height
+        width = cmds.modelEditor(modelPanel, w=True, q=True)
+        height = cmds.modelEditor(modelPanel, h=True, q=True)
+        if self.frameCapCustomChBox.isChecked():
+            width = self.frameCapWSpin.value()
+            height = self.frameCapHSpin.value()
+        # get render size (supersampling or not)
+        renderSize = 1
+        if self.supersampleImgChBox.isChecked():
+            renderSize = 2
+        # get image format
+        imgFormat = self.frameCapFormatCoBox.currentText()
+        # get over ride
+        override = mnpr_info.prototype
+        if not self.viewport2RenderChBox.isChecked():
+            override = ""
+        # fix file path directory and add a padding of 4 to file name
+        # and render the frame and advance to the next frame
+        print ('File Directory: '+ pathOld)
+        filepath =  pathOld.replace("\\", "/")
+        path, filename = os.path.split(filepath)
+        filename_w_ext = os.path.basename(filepath)
+        filename, file_extension = os.path.splitext(filename_w_ext)
+        padding = '4'
+        num = ''
+        for i in xrange(int(startFrame), int(endFrame)+1):
+            pm.currentTime(i)
+            #print i
+            pad = ("%%0%si" % padding) % int(i)
+            #print pad
+            namePad = filename + "." + pad + imgFormat
+            #print namePad
+            nameWithPath = path + "/" + namePad 
+            print  nameWithPath
+            dir =  nameWithPath
+            print dir
+            saveDir = dir
+            mnpr_system.renderFrame(saveDir, width, height, renderSize, imgFormat, override)
 
     def playblast(self):
         """ Gather all information from UI to playblast current timeline """
@@ -388,5 +478,5 @@ class ViewportRendererUI(qt.CoopMayaUI):
         if self.supersamplePlbChBox.isChecked():
             renderSize = 2
         # playblast timeline using npr system
-        print(renderSize)
+        print renderSize
         mnpr_system.playblast(saveDir, width, height, renderCamera, modelPanel, renderSize)
